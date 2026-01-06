@@ -118,7 +118,6 @@ def convert_to_gif(gcs_uri: str, request: Request):
 
 
 @app.get("/api/get_signed_url")
-import pages.workflow_create
 def get_signed_url(gcs_uri: str):
     """Generates a signed URL for a GCS object."""
     try:
