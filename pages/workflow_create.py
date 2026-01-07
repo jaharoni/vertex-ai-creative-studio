@@ -1,120 +1,125 @@
-import mesop as me
-from components.page import page_scaffold
+"""
+Workflow Creator UI - Text-to-Video Interface
+"""
+import streamlit as st
+import asyncio
+import uuid
+from services.workflows.workflow_orchestrator import WorkflowOrchestrator
+from services.workflows.job_queue import get_job_queue, JobStatus
 
-@me.page(
-    path="/workflow-create",
-    title="Workflow Creator - GenMedia Creative Studio",
-)
-def page():
-    with page_scaffold(page_name="Workflow Creator"):
-        workflow_content()
-
-def workflow_content():
-    with me.box(style=me.Style(
-        padding=me.Padding.all(32),
-        display="flex",
-        flex_direction="column",
-        gap=24,
-    )):
-        me.text(
-            "Visual Workflow Builder",
-            style=me.Style(
-                font_size=36,
-                font_weight=700,
-                margin=me.Margin(bottom=8),
-            ),
-        )
+def show():
+    st.title("🎬 Creative Automation Machine")
+    st.markdown("### Transform your ideas into video with AI")
+    
+    # Text prompt input
+    st.markdown("#### 📝 Describe your video")
+    prompt = st.text_area(
+        "Enter your video concept",
+        placeholder="Example: A 30-second commercial for eco-friendly shoes. Opens with sunrise over a forest, shows athletes running on trails, close-ups of sustainable materials, ends with brand logo.",
+        height=150
+    )
+    
+    # Advanced settings (collapsible)
+    with st.expander("⚙️ Advanced Settings"):
+        col1, col2 = st.columns(2)
         
-        me.text(
-            "Build custom AI workflows by connecting nodes - Create complex pipelines from simple building blocks",
-            style=me.Style(
-                font_size=18,
-                color="#666",
-                margin=me.Margin(bottom=32),
-            ),
-        )
-        
-        with me.box(style=me.Style(
-            border=me.Border.all(
-                me.BorderSide(width=2, color="#e0e0e0", style="solid")
-            ),
-            border_radius=12,
-            min_height=600,
-            background="#f5f5f5",
-            padding=me.Padding.all(24),
-            display="flex",
-            flex_direction="column",
-            align_items="center",
-            justify_content="center",
-        )):
-            me.text(
-                "Visual Workflow Canvas",
-                style=me.Style(
-                    font_size=24,
-                    font_weight=600,
-                    color="#999",
-                    margin=me.Margin(bottom=16),
-                ),
+        with col1:
+            duration = st.slider("Duration (seconds)", 5, 60, 30)
+            style = st.selectbox(
+                "Visual Style",
+                ["Cinematic", "Documentary", "Abstract", "Minimalist", "Vibrant"]
             )
             
-            me.text(
-                "Drag and drop nodes to build your workflow",
-                style=me.Style(
-                    font_size=16,
-                    color="#aaa",
-                    margin=me.Margin(bottom=8),
-                ),
+        with col2:
+            aspect_ratio = st.selectbox(
+                "Aspect Ratio",
+                ["16:9 (Landscape)", "9:16 (Vertical)", "1:1 (Square)"]
             )
+            video_model = st.selectbox(
+                "Video Model",
+                ["Veo 2", "Kling 1.6", "Wan Show"]
+            )
+    
+    # Generate button
+    if st.button("🎥 Generate Video", type="primary", use_container_width=True):
+        if not prompt:
+            st.error("Please enter a video concept")
+            return
             
-            me.text(
-                "Coming soon: Interactive node-based workflow builder with real-time preview",
-                style=me.Style(
-                    font_size=14,
-                    color="#bbb",
-                    font_style="italic",
-                ),
-            )
+        with st.spinner("Submitting job..."):
+            try:
+                # Create workflow JSON from prompt
+                orchestrator = WorkflowOrchestrator()
+                workflow_json = asyncio.run(orchestrator.create_workflow_from_prompt(
+                    prompt=prompt,
+                    duration=duration,
+                    style=style.lower()
+                ))
+                
+                # Submit to job queue
+                job_queue = get_job_queue()
+                job_id = str(uuid.uuid4())
+                asyncio.run(job_queue.submit_job(job_id, workflow_json))
+                
+                st.success(f"✅ Job submitted! Job ID: {job_id}")
+                st.info("Your video is being generated. Check the Status page for progress.")
+                
+                # Show workflow preview
+                with st.expander("📋 View Generated Workflow"):
+                    st.json(workflow_json)
+                    
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+    
+    # Divider
+    st.markdown("---")
+    
+    # Recent jobs
+    st.markdown("### 📊 Recent Jobs")
+    
+    job_queue = get_job_queue()
+    jobs = job_queue.list_jobs()
+    
+    if not jobs:
+        st.info("No jobs yet. Create your first video above!")
+    else:
+        # Show last 5 jobs
+        for job in sorted(jobs, key=lambda j: j.created_at, reverse=True)[:5]:
+            with st.container():
+                col1, col2, col3 = st.columns([3, 1, 1])
+                
+                with col1:
+                    st.text(f"Job {job.id[:8]}...")
+                    
+                with col2:
+                    if job.status == JobStatus.COMPLETED:
+                        st.success("✅ Complete")
+                    elif job.status == JobStatus.RUNNING:
+                        st.info("⏳ Running")
+                    elif job.status == JobStatus.FAILED:
+                        st.error("❌ Failed")
+                    elif job.status == JobStatus.QUEUED:
+                        st.warning("⏸️ Queued")
+                    else:
+                        st.text(job.status.value)
+                        
+                with col3:
+                    st.text(f"{int(job.progress * 100)}%")
+    
+    # Help section
+    with st.expander("💡 Tips for Better Results"):
+        st.markdown("""
+        **Crafting Great Prompts:**
+        - Be specific about visual elements, timing, and mood
+        - Include scene descriptions: "Opens with...", "Transitions to..."
+        - Mention key moments: "Close-up of...", "Wide shot of..."
+        - Specify audio needs: "Upbeat music", "Voiceover explaining..."
         
-        me.text(
-            "Key Features",
-            style=me.Style(
-                font_size=24,
-                font_weight=600,
-                margin=me.Margin(top=32, bottom=16),
-            ),
-        )
-        
-        with me.box(style=me.Style(
-            display="grid",
-            grid_template_columns="repeat(auto-fit, minmax(250px, 1fr))",
-            gap=16,
-        )):
-            feature_card("Node-Based Design", "Connect AI models visually")
-            feature_card("Real-Time Preview", "See results as you build")
-            feature_card("Save & Share", "Export and collaborate")
-            feature_card("One-Click Deploy", "Launch workflows instantly")
+        **Examples:**
+        - "60-second tech product demo. Sleek minimalist style. Shows product rotating, UI features, customer testimonials."
+        - "15-second social media ad. Vibrant colors. Fast cuts between people using the app, ending with logo reveal."
+        - "30-second brand story. Cinematic documentary style. Time-lapse of company growth, founder interviews, team collaboration."
+        """)
 
-def feature_card(title: str, description: str):
-    with me.box(style=me.Style(
-        background="#fff",
-        padding=me.Padding.all(20),
-        border_radius=8,
-        border=me.Border.all(
-            me.BorderSide(width=1, color="#e0e0e0", style="solid")
-        ),
-    )):
-        me.text(
-            title,
-            style=me.Style(
-                font_size=18,
-                font_weight=600,
-                margin=me.Margin(bottom=8),
-            ),
-        )
-        me.text(
-            description,
-            style=me.Style(
-                font_size=14,
-                color="#666",
-            ),
-        )
+if __name__ == "__main__":
+    show()
