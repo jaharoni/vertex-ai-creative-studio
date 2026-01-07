@@ -75,6 +75,7 @@ import pages.imagen_upscale
 import pages.storyboarder
 import pages.character_sheet
 import pages.brand_adherence
+import pages.workflow_create
 from workflows.retro_games import page as retro_games
 from state.state import AppState
 
@@ -118,7 +119,6 @@ def convert_to_gif(gcs_uri: str, request: Request):
 
 
 @app.get("/api/get_signed_url")
-import pages.workflow_create
 def get_signed_url(gcs_uri: str):
     """Generates a signed URL for a GCS object."""
     try:
@@ -309,3 +309,4 @@ if __name__ == "__main__":
         timeout_graceful_shutdown=0,
         proxy_headers=True,
     )
+# Force rebuild
