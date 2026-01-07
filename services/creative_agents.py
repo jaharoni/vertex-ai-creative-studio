@@ -25,7 +25,7 @@ class CreativeAgent:
         self.config = config
         self.project_id = project_id
         # Use Gemini 2.0 Flash Thinking for advanced reasoning
-        self.gemini = GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
+        self.gemini = GenerativeModel("gemini-2.0-flash-exp")
         self.conversation_history = []
         
     async def chat(self, user_message: str, context: Optional[Dict] = None) -> Dict:
