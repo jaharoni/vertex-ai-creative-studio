@@ -283,6 +283,7 @@ app.mount(
 )
 
 app.include_router(veo_router.router)
+app.include_router(workflow_router)
 
 
 app.mount(
