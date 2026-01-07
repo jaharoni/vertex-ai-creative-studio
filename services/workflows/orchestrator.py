@@ -1,98 +1,190 @@
-# Copyright 2026 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+"""Workflow Orchestrator - Gemini 2.0 as AI Director.
 
-"""Workflow Orchestrator - The Big Brain that plans creative workflows."""
-
+Transforms text prompts into structured video workflows.
+"""
 import json
+import logging
+from typing import Dict, Any, Optional
+from datetime import datetime
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
 
-from vertexai.generative_models import GenerativeModel
-from config.default import Default as cfg
-from config.firebase_config import FirebaseClient
-from common.analytics import get_logger
+from vertexai.generative_models import GenerativeModel, GenerationConfig
 
-logger = get_logger(__name__)
-db = FirebaseClient().get_client()
+logger = logging.getLogger(__name__)
 
 
 class WorkflowOrchestrator:
-    """Orchestrates AI-powered creative workflow generation."""
+    """Orchestrates AI commercial generation using Gemini 2.0."""
     
-    def __init__(self):
-        self.config = cfg()
-        self.model = GenerativeModel(self.config.MODEL_ID)
-    
-    async def create_workflow_from_prompt(self, prompt: str, user_email: str) -> Dict:
-        """
-        Takes a natural language prompt and generates a structured workflow.
+    def __init__(self, project_id: str, location: str = "us-central1"):
+        self.project_id = project_id
+        self.location = location
+        self.model = GenerativeModel("gemini-2.5-pro")
+        
+    def create_workflow_from_prompt(self, prompt: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Transform text prompt into structured workflow.
         
         Args:
-            prompt: User's creative vision (e.g., "30sec Nike ad, Brooklyn, golden hour")
-            user_email: User identifier
+            prompt: User's creative vision (e.g., "30sec Patagonia ad...")
+            user_id: Optional user identifier
             
         Returns:
-            Dict containing workflow_id and initial workflow structure
+            Complete workflow specification with shots, audio, style
         """
         logger.info(f"Creating workflow from prompt: {prompt[:100]}...")
         
-        # Generate workflow plan using Gemini
-        workflow_plan = await self._generate_workflow_plan(prompt)
-        
-        # Create workflow document in Firestore
+        # Generate workflow ID
         workflow_id = str(uuid.uuid4())
-        workflow_doc = {
-            "id": workflow_id,
-            "user_email": user_email,
-            "original_prompt": prompt,
-            "status": "planning",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-            "plan": workflow_plan,
-            "execution_log": [],
-            "outputs": {}
-        }
         
-        # Save to Firestore
-        db.collection("workflows").document(workflow_id).set(workflow_doc)
+        # Build Gemini prompt for workflow planning
+        planning_prompt = self._build_planning_prompt(prompt)
         
-        logger.info(f"Workflow created: {workflow_id}")
-        return {
-            "workflow_id": workflow_id,
-            "plan": workflow_plan,
-            "status": "planning"
-        }
+        try:
+            # Call Gemini 2.0 for intelligent planning
+            response = self.model.generate_content(
+                planning_prompt,
+                generation_config=GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=4096,
+                    response_mime_type="application/json"
+                )
+            )
+            
+            # Parse Gemini's workflow plan
+            workflow_spec = json.loads(response.text)
+            
+            # Add metadata
+            workflow = {
+                "workflow_id": workflow_id,
+                "user_id": user_id,
+                "original_prompt": prompt,
+                "created_at": datetime.utcnow().isoformat(),
+                "status": "planned",
+                "spec": workflow_spec,
+                "progress": {
+                    "planning": "complete",
+                    "keyframes": "pending",
+                    "videos": "pending",
+                    "audio": "pending",
+                    "composition": "pending"
+                }
+            }
+            
+            logger.info(f"Workflow {workflow_id} created successfully")
+            return workflow
+            
+        except Exception as e:
+            logger.error(f"Failed to create workflow: {e}")
+            raise
     
-    async def _generate_workflow_plan(self, prompt: str) -> Dict:
-        """
-        Uses Gemini to analyze the prompt and create a structured plan.
-        """
-        system_prompt = """
-You are a creative director AI. Analyze the user's vision and create a detailed workflow.
+    def _build_planning_prompt(self, user_prompt: str) -> str:
+        """Build detailed prompt for Gemini 2.0 workflow planning."""
+        return f"""You are an expert AI commercial director. Transform this creative brief into a detailed video production workflow.
 
-Output a JSON structure with:
-- duration: total seconds
-- shots: array of {time_range, scene_description, camera_movement, style_notes}
-- audio: {voiceover_script, music_description, sound_effects}
-- style_keywords: array of visual style descriptors
-- brand_voice: tone and messaging guidelines
+CREATIVE BRIEF:
+{user_prompt}
 
-Be specific and cinematic. Think like a director.
+Generate a complete workflow specification in JSON format with this structure:
+
+{{
+  "duration": <total_seconds>,
+  "shots": [
+    {{
+      "shot_number": 1,
+      "time_start": 0,
+      "time_end": 5,
+      "duration": 5,
+      "scene_description": "Wide shot of Yosemite valley at dawn with rising mist",
+      "camera_movement": "Slow drone pull back revealing scale",
+      "framing": "Wide landscape, rule of thirds",
+      "lighting": "Golden hour, rim lighting on peaks",
+      "mood": "Serene, anticipatory"
+    }}
+  ],
+  "audio": {{
+    "voiceover": {{
+      "script": "In the quiet before the world wakes...",
+      "style": "Whispered, intimate, contemplative",
+      "timing": [
+        {{"text": "In the quiet before the world wakes", "start": 2, "end": 6}}
+      ]
+    }},
+    "music": {{
+      "style": "Ambient minimal piano with swelling strings",
+      "intensity_curve": [[0, 0.3], [15, 0.5], [20, 0.8], [30, 0.4]],
+      "key_moments": ["Build at 20s for summit reveal"]
+    }}
+  }},
+  "style": {{
+    "visual_keywords": ["symmetrical framing", "muted earth tones", "16mm film grain"],
+    "color_palette": ["warm golds", "deep shadows", "muted greens"],
+    "references": ["Wes Anderson symmetry", "Planet Earth cinematography"],
+    "aspect_ratio": "16:9"
+  }},
+  "transitions": [
+    {{"from_shot": 1, "to_shot": 2, "type": "crossfade", "duration": 0.5}}
+  ],
+  "brand": {{
+    "name": "Patagonia",
+    "logo_timing": {{"start": 26, "end": 30}},
+    "brand_colors": ["#FF6B35", "#004E89"]
+  }}
+}}
+
+IMPORTANT GUIDELINES:
+- Break down into 5-8 distinct shots
+- Each shot should be 3-7 seconds
+- Vary camera angles and movements
+- Match visual style to brand identity
+- Create emotional arc across shots
+- Ensure audio complements visuals
+- Be specific with cinematography details
+
+Respond ONLY with the JSON object, no additional text.
+"""
+    
+    def refine_shot(self, workflow: Dict[str, Any], shot_number: int, refinement: str) -> Dict[str, Any]:
+        """Refine a specific shot based on user feedback.
+        
+        Args:
+            workflow: Existing workflow specification
+            shot_number: Which shot to refine (1-indexed)
+            refinement: User's feedback (e.g., "make it more cinematic")
+            
+        Returns:
+            Updated workflow with refined shot
+        """
+        logger.info(f"Refining shot {shot_number}: {refinement}")
+        
+        original_shot = workflow['spec']['shots'][shot_number - 1]
+        
+        refinement_prompt = f"""Refine this shot based on director's note.
+
+ORIGINAL SHOT:
+{json.dumps(original_shot, indent=2)}
+
+DIRECTOR'S NOTE:
+"{refinement}"
+
+Generate an improved version of this shot. Maintain the same duration and general scene, but enhance based on the feedback. Return ONLY the updated shot JSON object.
 """
         
-        full_prompt = f"{system_prompt}\n\nUser Vision: {prompt}"
-        
-        response = self.model.generate_content(
-            full_prompt,
-            generation_config={
-                "temperature": 0.7,
-                "response_mime_type": "application/json"
-            }
-        )
-        
-        plan = json.loads(response.text)
-        return plan
-
+        try:
+            response = self.model.generate_content(
+                refinement_prompt,
+                generation_config=GenerationConfig(
+                    temperature=0.8,
+                    response_mime_type="application/json"
+                )
+            )
+            
+            refined_shot = json.loads(response.text)
+            workflow['spec']['shots'][shot_number - 1] = refined_shot
+            workflow['updated_at'] = datetime.utcnow().isoformat()
+            
+            logger.info(f"Shot {shot_number} refined successfully")
+            return workflow
+            
+        except Exception as e:
+            logger.error(f"Failed to refine shot: {e}")
+            raise
